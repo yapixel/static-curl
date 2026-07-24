@@ -11,56 +11,78 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.13.0
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-      - name: Install build dependencies
+      - name: Build Curl in AArch64 Alpine Container
         run: |
-          sudo apt-get update
-          sudo apt-get install -y make perl wget tar xz-utils
+          # 1. 生成精简后的 build.sh（去掉了 GPG 验签逻辑）
+          cat << 'EOF' > build.sh
+          #!/bin/sh
+          CURL_VERSION='8.21.0'
+          [ "$1" != "" ] && CURL_VERSION="$1"
 
-      - name: Build Curl with Zig
-        run: |
-          CURL_VERSION="8.21.0"
-          TARGET="aarch64-linux-musl"
+          set -exu
 
-          export CC="zig cc -target $TARGET"
-          export CXX="zig c++ -target $TARGET"
-          export AR="zig ar"
-          export RANLIB="zig ranlib"
+          if [ ! -f curl-${CURL_VERSION}.tar.gz ]; then
+              wget https://curl.se/download/curl-${CURL_VERSION}.tar.gz
+          fi
 
-          wget https://curl.se/download/curl-${CURL_VERSION}.tar.gz
+          rm -rf "curl-${CURL_VERSION}/"
           tar xzf curl-${CURL_VERSION}.tar.gz
-          cd curl-${CURL_VERSION}
 
-          ./configure \
-            --host="aarch64-linux" \
+          cd curl-${CURL_VERSION}/
+
+          # 安装编译环境及 static 依赖库
+          apk add build-base clang openssl-dev nghttp2-dev nghttp2-static libssh2-dev libssh2-static perl
+          apk add openssl-libs-static zlib-static || true
+
+          export CC=clang
+
+          # 执行 configure & 静态编译
+          LDFLAGS="-static" PKG_CONFIG="pkg-config --static" ./configure \
             --disable-shared \
             --enable-static \
+            --disable-ldap \
             --enable-ipv6 \
             --enable-unix-sockets \
-            --disable-ldap \
+            --with-ssl \
+            --with-libssh2 \
             --disable-docs \
             --disable-manual \
-            --without-libpsl \
-            --without-ssl \
-            LDFLAGS="-static"
+            --without-libpsl
 
-          make -j$(nproc)
+          make -j$(nproc) V=1 LDFLAGS="-static -all-static"
 
-          cp src/curl ../curl-android-arm64
+          # 剥离符号表
+          strip src/curl
+
+          # 验证产物属性
+          ls -lah src/curl
+          file src/curl
+          ldd src/curl && exit 1 || true
+
+          ./src/curl -V
+
+          # 保存产物到挂载目录
+          mkdir -p /tmp/release/
+          mv src/curl "/tmp/release/curl-${ARCH}"
           cd ..
+          rm -rf "curl-${CURL_VERSION}/"
+          EOF
 
-          # 修正 objcopy 的输入输出参数格式
-          zig objcopy --strip-all curl-android-arm64 curl-android-arm64
+          chmod +x build.sh
 
-          ls -lh curl-android-arm64
-          file curl-android-arm64
+          # 2. 运行 Alpine Container 交叉编译
+          docker run --rm \
+            -v $(pwd):/tmp \
+            -w /tmp \
+            -e ARCH=aarch64 \
+            multiarch/alpine:aarch64-latest-stable \
+            /tmp/build.sh
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: curl-android-arm64
-          path: curl-android-arm64
+          path: release/curl-aarch64
