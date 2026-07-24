@@ -24,8 +24,6 @@ jobs:
       - name: Build Curl with Zig
         run: |
           CURL_VERSION="8.21.0"
-          # 使用 aarch64-linux-musl 替代 android 目标。
-          # Zig 自带完整 musl libc，编出的全静态二进制可以在 Android 上完美运行！
           TARGET="aarch64-linux-musl"
 
           export CC="zig cc -target $TARGET"
@@ -37,8 +35,6 @@ jobs:
           tar xzf curl-${CURL_VERSION}.tar.gz
           cd curl-${CURL_VERSION}
 
-          # 1. --host 设为 aarch64-linux
-          # 2. configure 阶段使用 -static，musl 对静态链接是 100% 原生完美支持的
           ./configure \
             --host="aarch64-linux" \
             --disable-shared \
@@ -57,8 +53,8 @@ jobs:
           cp src/curl ../curl-android-arm64
           cd ..
 
-          # 剥离调试符号
-          zig objcopy --strip-all curl-android-arm64
+          # 修正 objcopy 的输入输出参数格式
+          zig objcopy --strip-all curl-android-arm64 curl-android-arm64
 
           ls -lh curl-android-arm64
           file curl-android-arm64
