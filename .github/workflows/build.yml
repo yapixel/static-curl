@@ -1,48 +1,47 @@
 name: Build Static Curl for Android (ARM64)
 
 on:
-  workflow_dispatch: # 支持手动触发
-  push:
-    branches: [ "main", "master" ]
-
+  workflow_dispatch: 
+  
 jobs:
   build-android-arm64:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      # 1. 一键安装 Zig 环境
+      
       - name: Set up Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
           version: 0.13.0
 
-      # 2. 安装编译所需基础工具
+     
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y make perl wget tar xz-utils
 
-      # 3. 编译 curl
+    
       - name: Build Curl with Zig
         run: |
           CURL_VERSION="8.21.0"
-          TARGET="aarch64-linux"
+         
+          TARGET="aarch64-linux-android"
 
-          # 设置编译器为 zig cc
+       
           export CC="zig cc -target $TARGET"
           export CXX="zig c++ -target $TARGET"
           export AR="zig ar"
           export RANLIB="zig ranlib"
 
-          # 下载源码
+   
           wget https://curl.se/download/curl-${CURL_VERSION}.tar.gz
           tar xzf curl-${CURL_VERSION}.tar.gz
           cd curl-${CURL_VERSION}
 
-          # 配置静态编译参数
+         
           ./configure \
             --host="aarch64-linux" \
             --disable-shared \
@@ -56,19 +55,23 @@ jobs:
             --without-ssl \
             LDFLAGS="-static"
 
-          # 多核并行编译
+ 
           make -j$(nproc)
 
-          # 剥离符号以减小体积
-          $CC -s src/curl -o ../curl-android-arm64
-
+         
+          cp src/curl ../curl-android-arm64
           cd ..
+
+         
+          zig objcopy --strip-all curl-android-arm64
+
+         
           ls -lh curl-android-arm64
           file curl-android-arm64
 
-      # 4. 将编译好的二进制打包为 GitHub Artifacts 供下载
+      
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: curl-android-arm64
           path: curl-android-arm64
