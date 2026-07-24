@@ -16,7 +16,6 @@ jobs:
 
       - name: Build Curl in AArch64 Alpine Container
         run: |
-          # 1. 生成精简后的 build.sh（去掉了 GPG 验签逻辑）
           cat << 'EOF' > build.sh
           #!/bin/sh
           CURL_VERSION='8.21.0'
@@ -73,12 +72,13 @@ jobs:
 
           chmod +x build.sh
 
-          # 2. 运行 Alpine Container 交叉编译
+          # 改用官方最新的 alpine:latest ARM64 镜像
           docker run --rm \
+            --platform linux/arm64 \
             -v $(pwd):/tmp \
             -w /tmp \
             -e ARCH=aarch64 \
-            multiarch/alpine:aarch64-latest-stable \
+            alpine:latest \
             /tmp/build.sh
 
       - name: Upload build artifact
