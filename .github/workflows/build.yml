@@ -24,7 +24,9 @@ jobs:
       - name: Build Curl with Zig
         run: |
           CURL_VERSION="8.21.0"
-          TARGET="aarch64-linux-android"
+          # 使用 aarch64-linux-musl 替代 android 目标。
+          # Zig 自带完整 musl libc，编出的全静态二进制可以在 Android 上完美运行！
+          TARGET="aarch64-linux-musl"
 
           export CC="zig cc -target $TARGET"
           export CXX="zig c++ -target $TARGET"
@@ -35,11 +37,10 @@ jobs:
           tar xzf curl-${CURL_VERSION}.tar.gz
           cd curl-${CURL_VERSION}
 
-          # 1. --host 统一设为 $TARGET (aarch64-linux-android)
-          # 2. 不在此处加 LDFLAGS="-static"，避免 configure 检查 C 编译器时抛出
-          #    "C compiler cannot create executables" 错误
+          # 1. --host 设为 aarch64-linux
+          # 2. configure 阶段使用 -static，musl 对静态链接是 100% 原生完美支持的
           ./configure \
-            --host="$TARGET" \
+            --host="aarch64-linux" \
             --disable-shared \
             --enable-static \
             --enable-ipv6 \
@@ -48,14 +49,15 @@ jobs:
             --disable-docs \
             --disable-manual \
             --without-libpsl \
-            --without-ssl
+            --without-ssl \
+            LDFLAGS="-static"
 
-          # 在 make 阶段传递 -static 链接参数
-          make -j$(nproc) LDFLAGS="-static"
+          make -j$(nproc)
 
           cp src/curl ../curl-android-arm64
           cd ..
 
+          # 剥离调试符号
           zig objcopy --strip-all curl-android-arm64
 
           ls -lh curl-android-arm64
