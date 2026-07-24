@@ -28,8 +28,8 @@ jobs:
       # 3. 编译 curl
       - name: Build Curl with Zig
         run: |
-          CURL_VERSION="8.12.0"
-          TARGET="aarch64-linux-android"
+          CURL_VERSION="8.21.0"
+          TARGET="aarch64-linux"
 
           # 设置编译器为 zig cc
           export CC="zig cc -target $TARGET"
